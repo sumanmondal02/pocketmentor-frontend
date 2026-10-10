@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import Loader from '../components/Loader'
 import { Link, useParams } from 'react-router-dom'
+import { FiArrowLeft, FiZap, FiLayers, FiHelpCircle } from 'react-icons/fi'
 import api, { errMsg } from '../api'
 
 export default function NotePage() {
   const { id } = useParams()
   const [note, setNote] = useState(null)
   const [content, setContent] = useState(null)
-  const [busy, setBusy] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
+  const timer = useRef(null)
 
   const load = async () => {
     try {
@@ -15,49 +18,70 @@ export default function NotePage() {
       setNote(n.data); setContent(c.data)
     } catch (e) { setError(errMsg(e)) }
   }
-  useEffect(() => { load() }, [id])
+
+  const stop = () => clearInterval(timer.current)
+  const check = async () => {
+    try {
+      const { data } = await api.get(`/api/notes/${id}/status`)
+      if (data.status === 'PROCESSING') { setProcessing(true); return true }
+      stop(); setProcessing(false)
+      if (data.status === 'FAILED') setError(data.error || 'Generation failed')
+      else await load()
+    } catch (e) { stop(); setProcessing(false); setError(errMsg(e)) }
+    return false
+  }
+  const poll = () => { stop(); timer.current = setInterval(check, 3000) }
+
+  useEffect(() => {
+    load()
+    check().then((p) => { if (p) poll() })
+    return stop
+  }, [id])
 
   const generate = async () => {
-    setError(''); setBusy(true)
-    try { await api.post(`/api/notes/${id}/generate`); await load() }
+    setError('')
+    try { await api.post(`/api/notes/${id}/generate`); setProcessing(true); poll() }
     catch (e) { setError(errMsg(e)) }
-    finally { setBusy(false) }
   }
 
-  if (!note) return <p className="text-slate-500">{error || 'Loading...'}</p>
+  if (!note) return error ? <p className="text-coral font-semibold">{error}</p> : <Loader />
   const ready = !!content?.summary
 
-  const btn = 'rounded-lg px-4 py-2 text-sm font-medium'
   return (
     <div className="space-y-6">
-      <Link to="/" className="text-sm text-indigo-600">← All notes</Link>
-      <div className="bg-white rounded-2xl shadow p-6 space-y-4">
-        <h2 className="text-xl font-bold">{note.title}</h2>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-
-        <button onClick={generate} disabled={busy}
-                className={`${btn} bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60`}>
-          {busy ? 'Generating... this can take up to a minute' : ready ? 'Regenerate with AI' : 'Generate summary, flashcards & quiz'}
-        </button>
-        {ready && <p className="text-xs text-slate-500">Regenerating replaces the old flashcards and quiz.</p>}
+      <Link to="/home" className="inline-flex items-center gap-1 text-sm font-semibold"><FiArrowLeft /> Back to notes</Link>
+      <div className="card p-6 space-y-4">
+        <h1 className="text-2xl font-bold break-words">{note.title}</h1>
+        {error && <p className="text-sm text-coral font-semibold">{error}</p>}
+        {processing ? (
+          <div className="text-center space-y-3 py-4">
+            <img src="/mascot.png" alt="" className="h-24 mx-auto animate-bounce" />
+            <h2 className="text-xl font-semibold">Preparing your study material</h2>
+            <div className="indet max-w-sm mx-auto" />
+            <p className="text-sm text-muted">This can take a minute or two. You can leave this page and come back, and it keeps working.</p>
+          </div>
+        ) : (
+          <>
+            <button onClick={generate} className="btn btn-yellow">
+              <FiZap />{ready ? 'Regenerate with AI' : 'Generate summary, flashcards & quiz'}
+            </button>
+            {ready && <p className="text-xs text-muted">Regenerating replaces the old flashcards and quiz.</p>}
+          </>
+        )}
       </div>
 
-      {ready && (
+      {ready && !processing && (
         <>
-          <div className="bg-white rounded-2xl shadow p-6">
-            <h3 className="font-semibold mb-2">60-second summary</h3>
-            <p className="text-slate-700 whitespace-pre-line">{content.summary}</p>
+          <div className="card p-6">
+            <h2 className="font-semibold text-lg mb-2">60-second summary</h2>
+            <p className="whitespace-pre-line">{content.summary}</p>
             <div className="flex flex-wrap gap-2 mt-4">
-              {content.topics.map((t) => (
-                <span key={t} className="text-xs bg-indigo-50 text-indigo-700 rounded-full px-3 py-1">{t}</span>
-              ))}
+              {content.topics.map((t) => <span key={t} className="chip bg-lavender">{t}</span>)}
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link to={`/notes/${id}/flashcards`} className={`${btn} bg-white shadow text-slate-800`}>Practice flashcards</Link>
-            {content.quizId && (
-              <Link to={`/quiz/${content.quizId}`} className={`${btn} bg-white shadow text-slate-800`}>Take the quiz</Link>
-            )}
+            <Link to={`/notes/${id}/flashcards`} className="btn btn-teal"><FiLayers /> Flashcards</Link>
+            {content.quizId && <Link to={`/quiz/${content.quizId}`} className="btn btn-coral"><FiHelpCircle /> Take the quiz</Link>}
           </div>
         </>
       )}

@@ -5,6 +5,8 @@ import { AuthProvider } from './AuthContext'
 import App from './App'
 import './index.css'
 
+if (localStorage.getItem('reduceMotion') === '1') document.documentElement.classList.add('reduce-motion')
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>

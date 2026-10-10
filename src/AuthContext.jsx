@@ -16,6 +16,10 @@ export function AuthProvider({ children }) {
     localStorage.setItem('user', JSON.stringify(u))
     setUser(u)
   }
+  const updateUser = (u) => { 
+    localStorage.setItem('user', JSON.stringify(u));
+    setUser(u) 
+  }
 
   const logout = () => {
     localStorage.removeItem('token')
@@ -28,6 +32,7 @@ export function AuthProvider({ children }) {
       user,
       login: (p) => authenticate('login', p),
       register: (p) => authenticate('register', p),
+      updateUser,
       logout,
     }}>
       {children}
